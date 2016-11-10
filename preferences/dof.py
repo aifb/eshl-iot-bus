@@ -13,10 +13,13 @@ from __future__ import print_function
 
 import sys
 import traceback
-import asyncio
 import math
+import time
+import pickle
 
-from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
+from twisted.internet import task
+from twisted.internet.defer import inlineCallbacks
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 
 
 class DOFService(ApplicationSession):
@@ -24,8 +27,6 @@ class DOFService(ApplicationSession):
     Provides RPCs to set, increase or decrease the degrees of freedom
     configuration
     """
-
-    rloop = None
 
     def __init__(self, config=None):
         ApplicationSession.__init__(self, config)
@@ -35,6 +36,18 @@ class DOFService(ApplicationSession):
                      "-1609555631": 3600 * 4,
                      "-1609555510": 3600 * 4,
                      "-1609555628": 3600 * 4}
+        try:
+            with open('dofs.pickle', 'rb') as f:
+                self.dofs = pickle.load(f)
+        except IOError:
+            pass
+
+    def pickleState(self):
+        try:
+            with open('dofs.pickle', 'wb') as f:
+                pickle.dump(self.dofs, f)
+        except IOError:
+            pass
 
     def publishCurrentDof(self):
         try:
@@ -46,21 +59,20 @@ class DOFService(ApplicationSession):
 
     def loopFunc(self):
         self.publishCurrentDof()
-        loop = asyncio.get_event_loop()
-        now = loop.time()
-        delay = math.floor(now + 1) - now
-        self.rloop = loop.call_later(delay, self.loopFunc)
-
-    def startLoop(self):
-        if(self.rloop is None):
-            loop = asyncio.get_event_loop()
-            self.rloop = loop.call_later(1, self.loopFunc)
-        else:
-            print("loop already started")
 
     def setDof(self, id, newDof):
         id = str(id)
         self.dofs[id] = newDof
+        try:
+            if(self.is_attached()):
+                self.publish(u'eshl.preferences.v1.dof.changed',
+                             {"timestamp": int(time.time()),
+                              "id": id,
+                              "dof": newDof})
+        except Exception:
+            pass
+        self.publishCurrentDof()
+        self.pickleState()
 
     def increaseDof(self, id):
         id = str(id)
@@ -70,6 +82,8 @@ class DOFService(ApplicationSession):
             oldDof = 3600 * 4
 
         self.dofs[id] = oldDof + 1800
+        self.publishCurrentDof()
+        self.pickleState()
 
     def decreaseDof(self, id):
         id = str(id)
@@ -79,28 +93,33 @@ class DOFService(ApplicationSession):
             oldDof = 3600 * 4
 
         self.dofs[id] = oldDof - 1800
+        self.publishCurrentDof()
+        self.pickleState()
 
-    @asyncio.coroutine
+    @inlineCallbacks
     def onJoin(self, details):
         ApplicationSession.onJoin(self, details)
         print("session ready")
-        yield from self.register(self.setDof,
-                                 u'eshl.preferences.v1.dof.set')
-        yield from self.register(self.increaseDof,
-                                 u'eshl.preferences.v1.dof.increase')
-        yield from self.register(self.increaseDof,
-                                 u'eshl.preferences.v1.dof.inc')
-        yield from self.register(self.decreaseDof,
-                                 u'eshl.preferences.v1.dof.decrease')
-        yield from self.register(self.decreaseDof,
-                                 u'eshl.preferences.v1.dof.dec')
-        self.startLoop()
+        yield self.register(self.setDof,
+                            u'eshl.preferences.v1.dof.set')
+        yield self.register(self.increaseDof,
+                            u'eshl.preferences.v1.dof.increase')
+        yield self.register(self.increaseDof,
+                            u'eshl.preferences.v1.dof.inc')
+        yield self.register(self.decreaseDof,
+                            u'eshl.preferences.v1.dof.decrease')
+        yield self.register(self.decreaseDof,
+                            u'eshl.preferences.v1.dof.dec')
+        self._loop = task.LoopingCall(self.loopFunc)
+        self._loop.start(1.0)
         print("registered everything")
 
     def onLeave(self, details):
         ApplicationSession.onLeave(self, details)
+        if(hasattr(self, "_loop") and self._loop):
+            self._loop.stop()
         print("session left")
 
 if __name__ == '__main__':
     runner = ApplicationRunner(url=u"ws://wamp-router:8080/ws", realm=u"eshl")
-    runner.run(DOFService)
+    runner.run(DOFService, auto_reconnect=True)
