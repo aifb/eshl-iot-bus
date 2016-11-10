@@ -124,7 +124,8 @@ class OutMysql(ApplicationSession):
             timestampNow = round(time.time())
 
             if not self.connection.is_connected():
-                mysql.connector.connect(**self.mysqlConfig)
+                self.connection.close()  # This method tries to send a QUIT command and close the socket. It raises no exceptions.
+                self.connection = mysql.connector.connect(**self.mysqlConfig)
 
             try:
 

@@ -145,7 +145,7 @@ class InModbus(ApplicationSession):
             #self.client = ModbusClient(self.pfcIp, self.modbusTcpPort)
             if (self.client.connect() is False):
                 print('not connected')
-                self.client.connect()
+                self.client = self.client.connect()
                 print('trying to connecto to ' + str(self.pfcIp))
             address = 608
 #==============================================================================

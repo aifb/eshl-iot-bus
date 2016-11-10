@@ -483,7 +483,7 @@ class OutMysql(ApplicationSession):
             timestampNow = round(time.time() * 1000)
 
             try:
-                connection = self.connectionPool.get_connection()
+                connection = self.connectionPool.get_connection()  # When the MySQL connection is not connected, a reconnect is attempted.
 
                 cursor = connection.cursor()
                 for index in readout:

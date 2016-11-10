@@ -86,7 +86,8 @@ class OutMysql(ApplicationSession):
 
                 try:
                     if not self.connection.is_connected():
-                        mysql.connector.connect(**self.mysqlConfig)
+                        self.connection.close()  # This method tries to send a QUIT command and close the socket. It raises no exceptions.
+                        self.connection = mysql.connector.connect(**self.mysqlConfig)
                     cursor = self.connection.cursor()
                     cursor.execute(self.createTableStmt(self.pfc))
                     cursor.execute(self.prepareInsertStmt(self.pfc), readout)

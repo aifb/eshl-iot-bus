@@ -26,7 +26,7 @@ class OutMysql(ApplicationSession):
     """Logs the state of the relays to the configured MySQL database"""
     def __init__(self, config=None):
         ApplicationSession.__init__(self, config)
-
+        self.connection = mysql.connector.connect(**mysqlConfig)
 #==============================================================================
 # A notification email will be send every errorNotificationInterval hours
 #==============================================================================
@@ -119,14 +119,15 @@ class OutMysql(ApplicationSession):
             timestampNow = int(str(time.time())[0:10])
 
             try:
-                connection = mysql.connector.connect(**mysqlConfig)
+                if not self.connection.is_connected():
+                    self.connection.close()  # This method tries to send a QUIT command and close the socket. It raises no exceptions.
+                    self.connection = mysql.connector.connect(**self.mysqlConfig)
 
-                cursor = connection.cursor()
+                cursor = self.connection.cursor()
                 cursor.execute(self.createTableStmt(self.pfc))
                 cursor.execute(self.prepareInsertStmt(self.pfc), readout)
-                connection.commit()  # one commit per second with all sql-statements
+                self.connection.commit()  # one commit per second with all sql-statements
                 cursor.close()
-                connection.close()
 #==============================================================================
 # Error-Handling
 #==============================================================================

@@ -45,7 +45,7 @@ class InModbus(ApplicationSession):
 
             if (self.client.connect() is False):
                 print('not connected')
-                self.client.connect()
+                self.client = self.client.connect()
                 print('trying to connecto to ' + str(self.pfcIp))
 
             result = self.client.read_coils(0, 15)
